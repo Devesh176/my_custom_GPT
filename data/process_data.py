@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
 import regex as re
+import torch
 
 # The data set used
-df = pd.read_parquet("hf://datasets/KisanVaani/agriculture-qa-english-only/data/train-00000-of-00001.parquet")
+
 
 def preprocess_data(df):
     # text = df.to_string()

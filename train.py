@@ -18,7 +18,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 for iter in range(max_iters):
   if iter % eval_iters == 0:
-    losses = estimate_loss(model)
+    losses = estimate_loss(model, data)
     print(f"step: {iter}, train_loss: {losses['train']:.4f}, val_loss: {losses['val']:.4f}")
 
   # sample of batch of data

@@ -4,7 +4,7 @@ import torch
 from custom_GPT.params import batch_size, block_size, n_embd, n_layer, n_head, dropout, device, eval_iters, max_iters, learning_rate
 from custom_GPT.GPT_model import GPTLanguageModel
 from custom_GPT.BigramLM import BigramLanguageModel
-from utils.utils import get_batch, estimate_loss
+from utils.utils import get_batch
 from data.process_data import preprocess_data
 
 

@@ -1,6 +1,6 @@
 import torch
 from custom_GPT.params import batch_size, block_size, n_embd, n_layer, n_head, dropout, device, eval_iters, max_iters
-from custom_GPT.GPT_model import model
+# from custom_GPT.GPT_model import model
 
 def get_batch(split, data):
     n = int(0.8*len(data))
@@ -16,7 +16,7 @@ def get_batch(split, data):
 
 @torch.no_grad() #pytorch doesnt use gradient at all in this cell
 
-def estimate_loss():
+def estimate_loss(model):
   out = {}
   model.eval()
   for split in ['train', 'val']:

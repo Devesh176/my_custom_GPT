@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-from params import batch_size, block_size, n_embd, n_layer, n_head, dropout
+from custom_GPT.params import batch_size, block_size, n_embd, n_layer, n_head, dropout
 #TODO: Import vocab_size from the data preprocessing module if needed
-from data.process_data import vocab_size
+# from data.process_data import vocab_size
 
 # Define the Head, MultiHeadAttention, FeedForward, Block, and GPTLanguageModel classes
 class Head(nn.Module):
@@ -165,8 +165,8 @@ class GPTLanguageModel(nn.Module):
       index = torch.cat((index, index_next), dim=1) # append the sampled ata to the running sequence
     return index
 
-model = GPTLanguageModel(vocab_size)
-m = model.to(device)  # to use gpu if availbale
+# model = GPTLanguageModel(vocab_size)
+# m = model.to(device)  # to use gpu if availbale
 
 # context = torch.zeros((1,1), dtype=torch.long, device=device)
 # generated_chars = decode(m.generate(context, max_new_tokens=500)[0].tolist())

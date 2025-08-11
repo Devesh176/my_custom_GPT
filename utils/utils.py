@@ -14,17 +14,3 @@ def get_batch(split, data):
     return x, y
 
 
-@torch.no_grad() #pytorch doesnt use gradient at all in this cell
-
-def estimate_loss(model,data):
-  out = {}
-  model.eval()
-  for split in ['train', 'val']:
-    losses = torch.zeros(eval_iters, device='cuda')
-    for k in range(eval_iters):
-      X, Y = get_batch(split, data)  # Assuming data is passed or available globally
-      logits, loss = model.forward_pass(X, Y)
-      losses[k] = loss.item()
-    out[split] = losses.mean()
-  model.train()
-  return out

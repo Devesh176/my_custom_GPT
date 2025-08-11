@@ -16,9 +16,24 @@ model = GPTLanguageModel(vocab_size)
 # create a pytorch optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+@torch.no_grad() #pytorch doesnt use gradient at all in this cell
+
+def estimate_loss():
+  out = {}
+  model.eval()
+  for split in ['train', 'val']:
+    losses = torch.zeros(eval_iters)
+    for k in range(eval_iters):
+      X, Y = get_batch(split, data)  # Assuming data is passed or available globally
+      logits, loss = model.forward_pass(X, Y)
+      losses[k] = loss.item()
+    out[split] = losses.mean()
+  model.train()
+  return out
+
 for iter in range(max_iters):
   if iter % eval_iters == 0:
-    losses = estimate_loss(model, data)
+    losses = estimate_loss()
     print(f"step: {iter}, train_loss: {losses['train']:.4f}, val_loss: {losses['val']:.4f}")
 
   # sample of batch of data

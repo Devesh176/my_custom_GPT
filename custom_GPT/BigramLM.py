@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-from custom_GPT.params import batch_size, block_size, n_embd, n_layer, n_head, dropout
+from params import batch_size, block_size, n_embd, n_layer, n_head, dropout
 # TODO: Import vocab_size from the data preprocessing module if needed
 from data.process_data import vocab_size, encode, decode
 

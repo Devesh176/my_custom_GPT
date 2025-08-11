@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import torch
 from params import batch_size, block_size, n_embd, n_layer, n_head, dropout, device, eval_iters, max_iters, learning_rate
-from custom_GPT.GPT_model import model
+from GPT_model import model
 from utils.utils import get_batch, estimate_loss
 from data.process_data import preprocess_data
 

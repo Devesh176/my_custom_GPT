@@ -130,7 +130,7 @@ class GPTLanguageModel(nn.Module):
 
     B, T = index.shape #Batch, Time
     tok_em = self.token_embedding_table(index) # (B,T,C), looks up the embeddings for the input token ID's
-    pos_em = self.position_embedding_table(torch.arange(T, device=device)) # (T,C) , looks up the positional embeddings for the sequence of length T.
+    pos_em = self.position_embedding_table(torch.arange(T, device='cuda')) # (T,C) , looks up the positional embeddings for the sequence of length T.
     x = tok_em + pos_em # (B,T,C)
     x = self.blocks(x) # (B,T,C)
     x = self.ln_f(x) # (B,T,C)

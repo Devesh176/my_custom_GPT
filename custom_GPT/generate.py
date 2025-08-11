@@ -3,6 +3,6 @@ from custom_GPT.params import device
 from custom_GPT.BigramLM import m
 from data.process_data import decode
 
-context = torch.zeros((1,1), dtype=torch.long, device=device)
+context = torch.zeros((1,1), dtype=torch.long, device='cuda' if torch.cuda.is_available() else 'cpu')
 generated_chars = decode(m.generate(context, max_new_tokens=500)[0].tolist())
 print(generated_chars)

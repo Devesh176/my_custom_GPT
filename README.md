@@ -14,7 +14,6 @@ This project focuses on building and fine-tuning a custom GPT model for question
     - Implementing a custom Bigram Language Model.
     - Implementing a GPT-like Transformer model from scratch.
     - Training and evaluating the custom models.
-    - Fine-tuning a pre-trained DistilGPT2 model on the dataset.
 
 ## Getting Started
 
@@ -33,7 +32,7 @@ The project uses the "KisanVaani/agriculture-qa-english-only" dataset from Huggi
 
 -   **Custom Bigram Language Model:** A basic language model implemented from scratch to understand the fundamentals of language modeling.
 -   **Custom GPT-like Transformer:** A more advanced model built with Transformer blocks, including multi-head attention and feed-forward networks.
--   **Fine-tuned DistilGPT2:** A pre-trained DistilGPT2 model is fine-tuned on the agricultural dataset to leverage transfer learning.
+
 
 ## Training and Evaluation
 

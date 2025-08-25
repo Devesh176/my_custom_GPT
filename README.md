@@ -17,7 +17,7 @@ This project focuses on building and fine-tuning a custom GPT model for question
 
 ## Getting Started
 
-1.  **Clone the repository (if applicable):** If the code is in a separate repository, provide instructions on how to clone it.
+1.  **Clone the repository:** 
 2.  **Install dependencies:**
   ```bash
      pip install pandas numpy regex torch torchtext transformers sentencepiece tqdm datasets

@@ -10,7 +10,11 @@ paths:
 
 data_load:
     batch_size: 128  # hyper parameters
-    block_size: 64  # hyper parameters
+    block_size: 256
+    num_workers: 4
+    stride: 1
+    max_length: 512
+    shuffle: True
 
 gpt:
     max_iters: 500

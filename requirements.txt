@@ -5,3 +5,4 @@ torchaudio
 tiktoken
 matplotlib
 tiktoken
+pyyaml

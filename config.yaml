@@ -4,9 +4,12 @@ project:
     version: "1.0.0"
     author: "Devesh176"
 
-paths:
+tokenizer:
     tokenizer_vocab_path: "utils/bpe_vocab.json"
     tokenizer_merges_path: "utils/bpe_merges.txt"
+    vocab_size: 50257 # same as gpt2 tokenzer
+    embedding_dim: 256
+    token_sequence_size: 256
 
 data_load:
     batch_size: 128  # hyper parameters

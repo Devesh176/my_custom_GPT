@@ -5,8 +5,8 @@ import yaml
 
 with open('config.yaml', 'r') as file:
     config = yaml.safe_load(file)
-tokenizer_vocab_path = Path(config["tokenizer_vocab_path"])
-tokenizer_merges_path = Path(config["tokenizer_merges_path"])
+tokenizer_vocab_path = Path(config["tokenizer"]["vocab_path"])
+tokenizer_merges_path = Path(config["tokenizer"]["merges_path"])
 
 class Tokenizer:
     def __init__(self, mode: str = "gpt2"):
@@ -28,7 +28,7 @@ class Tokenizer:
             tokens = self.enc.encode(text)
         else:
             if not tokenizer_vocab_path.exists():
-                self.tokenizer.train(text, vocab_size=10000)  # Example vocab size
+                self.tokenizer.train(text, vocab_size=config['tokenizer']['vocab_size'])  # Example vocab size
                 self.tokenizer.save(tokenizer_vocab_path, tokenizer_merges_path)
 
             # load the tokenizer from the saved file

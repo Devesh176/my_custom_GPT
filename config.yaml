@@ -1,0 +1,24 @@
+project:
+    name: "my_custom_GPT"
+    description: "A custom GPT model for text generation"
+    version: "1.0.0"
+    author: "Devesh176"
+
+paths:
+    tokenizer_vocab_path: "utils/bpe_vocab.json"
+    tokenizer_merges_path: "utils/bpe_merges.txt"
+
+data_load:
+    batch_size: 128  # hyper parameters
+    block_size: 64  # hyper parameters
+
+gpt:
+    max_iters: 500
+    eval_iters: 100
+    learning_rate: 3e-4
+    n_embd: 384 # how long the embedding vector will be
+    n_layer: 8
+    n_head: 8
+    dropout: 0.2
+    device: 'cuda'
+

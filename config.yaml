@@ -19,13 +19,25 @@ data_load:
     max_length: 512
     shuffle: True
 
-gpt:
-    max_iters: 500
-    eval_iters: 100
-    learning_rate: 3e-4
-    n_embd: 384 # how long the embedding vector will be
-    n_layer: 8
-    n_head: 8
-    dropout: 0.2
-    device: 'cuda'
+GPT_CONFIG:
+    model_name: "custom_gpt"
+    model_type: "GPT"
+    tokenizer_type: "BPE"
+    optimizer: "AdamW"
+    loss_function: "CrossEntropyLoss"
+    scheduler: "CosineAnnealingLR"
+    warmup_steps: 1000
+    weight_decay: 0.01
+    gradient_clip_val: 1.0
+    save_checkpoint_every: 1000
+    log_interval: 100
+    emb_dim: 256
+    head_dim: 256
+    n_heads: 8
+    ctx_length: 256
+    dropout: 0.1
+    qkv_bias: True
+    n_layers: 12
+    device: "cuda"  # or "cpu"
+
 

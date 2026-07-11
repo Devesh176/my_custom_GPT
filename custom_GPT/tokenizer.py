@@ -1,12 +1,12 @@
 import tiktoken
-from .bpe import BPETokenizerSimple
+from bpe import BPETokenizerSimple
 from pathlib import Path
 import yaml
 
 with open('config.yaml', 'r') as file:
     config = yaml.safe_load(file)
-tokenizer_vocab_path = Path(config["tokenizer"]["vocab_path"])
-tokenizer_merges_path = Path(config["tokenizer"]["merges_path"])
+tokenizer_vocab_path = Path(config["tokenizer"]["tokenizer_vocab_path"])
+tokenizer_merges_path = Path(config["tokenizer"]["tokenizer_merges_path"])
 
 class Tokenizer:
     def __init__(self, mode: str = "gpt2"):
@@ -36,4 +36,12 @@ class Tokenizer:
 
             tokens = self.tokenizer.encode(text)
         return tokens
+    
+    def decode(self, token_ids: list, skip_special_tokens: bool = True) -> str:
+        """Decode the token IDs back to text"""
+        if self.mode != "bpe":
+            text = self.enc.decode(token_ids)
+        else:
+            text = self.tokenizer.decode(token_ids)
+        return text
         

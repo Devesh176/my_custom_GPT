@@ -5,10 +5,11 @@ project:
     author: "Devesh176"
 
 tokenizer:
+    tokenizer_type: "BPE"
     tokenizer_vocab_path: "utils/bpe_vocab.json"
     tokenizer_merges_path: "utils/bpe_merges.txt"
     vocab_size: 50257 # same as gpt2 tokenzer
-    embedding_dim: 256
+    embedding_dim: 768
     token_sequence_size: 256
 
 data_load:
@@ -18,11 +19,11 @@ data_load:
     stride: 1
     max_length: 512
     shuffle: True
+    token_sequence_size: 256
 
 GPT_CONFIG:
     model_name: "custom_gpt"
     model_type: "GPT"
-    tokenizer_type: "BPE"
     optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     scheduler: "CosineAnnealingLR"
@@ -31,12 +32,12 @@ GPT_CONFIG:
     gradient_clip_val: 1.0
     save_checkpoint_every: 1000
     log_interval: 100
-    emb_dim: 256
-    head_dim: 256
-    n_heads: 8
-    ctx_length: 256
+    emb_dim: 768
+    n_heads: 12
+    ff_hidden_dim: 1024
+    ctx_length: 1024
     dropout: 0.1
-    qkv_bias: True
+    qkv_bias: False
     n_layers: 12
     device: "cuda"  # or "cpu"
 

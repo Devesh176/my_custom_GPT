@@ -24,8 +24,8 @@ class LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-12):
         super(LayerNorm, self).__init__()
         self.eps = eps
-        self.scale = nn.Parameter(torch.ones(hidden_size))
-        self.bias = nn.Parameter(torch.zeros(hidden_size))
+        self.scale = nn.Parameter(torch.ones(hidden_size, device='cuda'))
+        self.bias = nn.Parameter(torch.zeros(hidden_size, device='cuda'))
 
     def forward(self, x):
         u = x.mean(-1, keepdim=True)

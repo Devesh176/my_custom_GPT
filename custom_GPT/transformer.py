@@ -6,13 +6,13 @@ class TransformerBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         input_dim = config["emb_dim"]
-        head_dim = config["head_dim"]
+        # head_dim = config["head_dim"]
         n_heads = config["n_heads"]
         ctx_length = config["ctx_length"]
         dropout = config["dropout"]
         qkv_bias = config["qkv_bias"]
 
-        self.attention = MultiHeadAttention(input_dim, n_heads, head_dim, dropout, ctx_length, qkv_bias)
+        self.attention = MultiHeadAttention(input_dim = input_dim, num_heads=n_heads, dropout=dropout, context_len=ctx_length, qkv_bias=qkv_bias)
         self.ff = FeedForward(input_dim, config["ff_hidden_dim"], input_dim)
         self.ln1 = LayerNorm(input_dim)
         self.ln2 = LayerNorm(input_dim)

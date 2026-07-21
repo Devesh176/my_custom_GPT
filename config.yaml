@@ -13,18 +13,18 @@ tokenizer:
     token_sequence_size: 256
 
 data_load:
-    batch_size: 128  # hyper parameters
-    block_size: 256
+    batch_size: 64  # hyper parameters
+    block_size: 64
     num_workers: 4
     stride: 1
-    max_length: 512
+    max_length: 128
     shuffle: True
     token_sequence_size: 256
 
 GPT_CONFIG:
     model_name: "custom_gpt"
     model_type: "GPT"
-    optimizer: "AdamW"
+    # optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     scheduler: "CosineAnnealingLR"
     warmup_steps: 1000
@@ -40,5 +40,19 @@ GPT_CONFIG:
     qkv_bias: False
     n_layers: 12
     device: "cuda"  # or "cpu"
+
+TRAINING_CONFIG:
+    optimizer: "AdamW"
+    loss_function: "CrossEntropyLoss"
+    num_epochs: 10
+    batch_size: 1
+    weight_decay: 0.1
+    learning_rate: 5e-4
+    eval_freq: 100
+    eval_iter: 100
+    train_ratio: 0.8
+    num_workers: 4
+
+
 
 

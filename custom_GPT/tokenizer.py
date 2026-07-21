@@ -26,6 +26,8 @@ class Tokenizer:
 
         if self.mode != "bpe":
             tokens = self.enc.encode(text)
+            # print(f"text input: {text}")
+            # print(f"tokens from tokenizer: {tokens}")
         else:
             if not tokenizer_vocab_path.exists():
                 self.tokenizer.train(text, vocab_size=config['tokenizer']['vocab_size'])  # Example vocab size

@@ -48,8 +48,8 @@ TRAINING_CONFIG:
     batch_size: 1
     weight_decay: 0.1
     learning_rate: 5e-4
-    eval_freq: 100
-    eval_iter: 100
+    eval_freq: 1
+    eval_iter: 1
     train_ratio: 0.8
     num_workers: 4
 

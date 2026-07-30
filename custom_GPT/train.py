@@ -54,7 +54,7 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
 def generate_sample(model, tokenizer, device, start_context):
     model.eval()
     context_size = model.positional_embedding.shape[0]
-    encoded = tokenizer.encode(start_context)
+    encoded = tokenizer.tokenize(start_context)
     encoded_tensor = torch.tensor(encoded).unsqueeze(0).to(device)  # add batch dimension and move to device
     with torch.no_grad():
         token_ids = generate_text(

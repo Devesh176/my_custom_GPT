@@ -172,5 +172,5 @@ if __name__ == "__main__":
     plot_loss(train_lossess, val_lossess)
 
     torch.save(model.state_dict(), "gpt_model.pth")
-    model.load_state_dict(torch.load("gpt_model.pth"), map_location=config['GPT_CONFIG']['device'], strict=False)
+    model.load_state_dict(torch.load("gpt_model.pth", map_location=config['GPT_CONFIG']['device']), strict=False)
 

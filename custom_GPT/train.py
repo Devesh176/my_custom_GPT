@@ -54,41 +54,43 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
 def generate_sample(model, tokenizer, device, start_context):
     model.eval()
     context_size = model.positional_embedding.shape[0]
-    encoded = tokenizer.tokenize(start_context)
-    encoded_tensor = torch.tensor(encoded).unsqueeze(0).to(device)  # add batch dimension and move to device
+    # encoded = tokenizer.tokenize(start_context)
+    # encoded_tensor = torch.tensor(encoded).unsqueeze(0).to(device)  # add batch dimension and move to device
     with torch.no_grad():
-        token_ids = generate_text(
-            model=model, idx=encoded_tensor,
-            max_length=50, context_size=context_size
+        decoded_text = generate_text(
+            model=model, prompt=start_context, tokenizer=tokenizer,
+            max_length=50, temperature=1.0, device='cuda'
         )
-        decoded_text = tokenizer.decode(token_ids.squeeze(0).tolist())
+        # decoded_text = tokenizer.decode(token_ids.squeeze(0).tolist())
         print(decoded_text.replace("\n", " "))  # Compact print format
     model.train()
 
 def train_model(model, train_loader, val_loader, device, optimizer, num_epochs, eval_iter, tokenizer, start_context, eval_freq):
     
     train_losses, val_losses = [], []
+    ##########
     print(f"Starting the Epochs {num_epochs}")
     for epoch in range(num_epochs):
-        model.train()  # Set the model to training mode
-        print("Training batches from train_loader")
-        for batch in train_loader:
-            inputs, targets = batch
-            inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()  # Clear gradients
-            outputs = model(inputs)
-            loss = torch.nn.functional.cross_entropy(outputs.view(-1, outputs.size(-1)), targets.view(-1))
-            loss.backward()  # Backpropagation
-            optimizer.step()  # Update parameters
-        print("finished the batches from train_loader")
-        if (epoch + 1) % eval_freq == 0:
-            print("Evaluating the model")
-            train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)
-            print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-        torch.cuda.synchronize()
-        print("GPU synchronized")
+        # model.train()  # Set the model to training mode
+        # print("Training batches from train_loader")
+        # for batch in train_loader:
+        #     inputs, targets = batch
+        #     inputs, targets = inputs.to(device), targets.to(device)
+        #     optimizer.zero_grad()  # Clear gradients
+        #     outputs = model(inputs)
+        #     loss = torch.nn.functional.cross_entropy(outputs.view(-1, outputs.size(-1)), targets.view(-1))
+        #     loss.backward()  # Backpropagation
+        #     optimizer.step()  # Update parameters
+        # print("finished the batches from train_loader")
+        # if (epoch + 1) % eval_freq == 0:
+        #     print("Evaluating the model")
+        #     train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)
+        #     print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        #     train_losses.append(train_loss)
+        #     val_losses.append(val_loss)
+        # torch.cuda.synchronize()
+        # print("GPU synchronized")
+        ###########
         # Evaluate the model after each epoch
         # train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)
         # print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")

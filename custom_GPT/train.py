@@ -71,25 +71,25 @@ def train_model(model, train_loader, val_loader, device, optimizer, num_epochs, 
     ##########
     print(f"Starting the Epochs {num_epochs}")
     for epoch in range(num_epochs):
-        # model.train()  # Set the model to training mode
-        # print("Training batches from train_loader")
-        # for batch in train_loader:
-        #     inputs, targets = batch
-        #     inputs, targets = inputs.to(device), targets.to(device)
-        #     optimizer.zero_grad()  # Clear gradients
-        #     outputs = model(inputs)
-        #     loss = torch.nn.functional.cross_entropy(outputs.view(-1, outputs.size(-1)), targets.view(-1))
-        #     loss.backward()  # Backpropagation
-        #     optimizer.step()  # Update parameters
-        # print("finished the batches from train_loader")
-        # if (epoch + 1) % eval_freq == 0:
-        #     print("Evaluating the model")
-        #     train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)
-        #     print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-        #     train_losses.append(train_loss)
-        #     val_losses.append(val_loss)
-        # torch.cuda.synchronize()
-        # print("GPU synchronized")
+        model.train()  # Set the model to training mode
+        print("Training batches from train_loader")
+        for batch in train_loader:
+            inputs, targets = batch
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()  # Clear gradients
+            outputs = model(inputs)
+            loss = torch.nn.functional.cross_entropy(outputs.view(-1, outputs.size(-1)), targets.view(-1))
+            loss.backward()  # Backpropagation
+            optimizer.step()  # Update parameters
+        print("finished the batches from train_loader")
+        if (epoch + 1) % eval_freq == 0:
+            print("Evaluating the model")
+            train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)
+            print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+        torch.cuda.synchronize()
+        print("GPU synchronized")
         ###########
         # Evaluate the model after each epoch
         # train_loss, val_loss = evaluate_model(model, train_loader, val_loader, device, eval_iter)

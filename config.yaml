@@ -15,7 +15,7 @@ tokenizer:
 data_load:
     batch_size: 64  # hyper parameters
     block_size: 64
-    num_workers: 4
+    num_workers: 0
     stride: 1
     max_length: 128
     shuffle: True
@@ -51,7 +51,7 @@ TRAINING_CONFIG:
     eval_freq: 1
     eval_iter: 1
     train_ratio: 0.8
-    num_workers: 4
+    num_workers: 0
 
 
 

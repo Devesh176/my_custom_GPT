@@ -1,5 +1,8 @@
-import math
 import os
+# Must be set BEFORE torch is imported to take effect
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+import math
 import yaml
 import torch
 import matplotlib

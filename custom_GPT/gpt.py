@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 from transformer import TransformerBlock
 from embeddings import token_embedding_layer, positional_embedding_layer
 
@@ -20,6 +21,9 @@ class GPT(nn.Module):
             TransformerBlock(config=config['GPT_CONFIG'])
             for _ in range(config['GPT_CONFIG']['n_layers'])
         ])
+        # Gradient checkpointing: recompute activations on backward instead of
+        # storing them — cuts peak activation memory by ~70% at ~20% speed cost.
+        self.use_gradient_checkpointing = config['GPT_CONFIG'].get('gradient_checkpointing', False)
 
         self.final_layer_norm = nn.LayerNorm(emb_dim)
         self.output_layer     = nn.Linear(emb_dim, vocab_size, bias=False)
@@ -36,7 +40,11 @@ class GPT(nn.Module):
         embeddings = self.dropout_embedding(token_emb + pos_emb)
 
         for block in self.transformer_blocks:
-            embeddings = block(embeddings)
+            if self.use_gradient_checkpointing and self.training:
+                # use_reentrant=False is required for autocast + gradient checkpointing
+                embeddings = checkpoint(block, embeddings, use_reentrant=False)
+            else:
+                embeddings = block(embeddings)
 
         embeddings = self.final_layer_norm(embeddings)
         logits     = self.output_layer(embeddings)   # (batch, seq_len, vocab_size)

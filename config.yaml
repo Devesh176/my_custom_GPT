@@ -35,17 +35,18 @@ GPT_CONFIG:
     dropout: 0.1
     qkv_bias: False
     n_layers: 12
+    gradient_checkpointing: True  # recompute activations on backward — saves ~70% activation memory
     device: "cuda"
 
 TRAINING_CONFIG:
     optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     num_epochs: 10
-    batch_size: 8                   # reduced from 16; effective batch = 8 × grad_accum_steps
-    gradient_accumulation_steps: 2  # effective batch size = 8 × 2 = 16
+    batch_size: 4                   # safe for T4 14.5GB; effective batch = 4 × grad_accum_steps
+    gradient_accumulation_steps: 4  # effective batch size = 4 × 4 = 16
     weight_decay: 0.1
-    learning_rate: 3e-4      # slightly lower LR is safer for stable training
+    learning_rate: 3e-4
     eval_freq: 1
-    eval_iter: 50            # evaluate on 50 batches (was 1 — too noisy)
+    eval_iter: 50
     train_ratio: 0.9
-    num_workers: 2
+    num_workers: 0                  # 0 = stable on Kaggle; avoids shared-memory issues

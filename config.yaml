@@ -41,7 +41,8 @@ TRAINING_CONFIG:
     optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     num_epochs: 10
-    batch_size: 16
+    batch_size: 8                   # reduced from 16; effective batch = 8 × grad_accum_steps
+    gradient_accumulation_steps: 2  # effective batch size = 8 × 2 = 16
     weight_decay: 0.1
     learning_rate: 3e-4      # slightly lower LR is safer for stable training
     eval_freq: 1

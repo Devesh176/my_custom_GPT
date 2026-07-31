@@ -6,7 +6,8 @@ import matplotlib
 matplotlib.use('Agg')   # headless-safe (Kaggle / no display)
 import matplotlib.pyplot as plt
 from pathlib import Path
-from torch.cuda.amp import GradScaler, autocast
+# Fix: torch.cuda.amp is deprecated in PyTorch 2.x — use torch.amp instead
+from torch.amp import GradScaler, autocast
 
 from gpt import GPT
 from generate import generate_text
@@ -79,7 +80,7 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
 
     gradient_clip_val = config['GPT_CONFIG']['gradient_clip_val']
     use_amp = (device == 'cuda')
-    scaler  = GradScaler(enabled=use_amp)
+    scaler  = GradScaler('cuda', enabled=use_amp)  # fixed deprecation
     train_losses, val_losses = [], []
 
     print(f"Starting training — {num_epochs} epoch(s), "
@@ -87,22 +88,25 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
         model.train()
-        for inputs, targets in train_loader:
+        grad_accum_steps = config['TRAINING_CONFIG'].get('gradient_accumulation_steps', 1)
+        for step, (inputs, targets) in enumerate(train_loader):
             inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()
-            # AMP: autocast wraps forward pass for FP16 on CUDA
-            with autocast(enabled=use_amp):
+            # autocast: fixed deprecation (torch.amp instead of torch.cuda.amp)
+            with autocast('cuda', enabled=use_amp):
                 logits = model(inputs)
+                # Divide loss by accum steps so gradients average correctly
                 loss   = torch.nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
-                )
-            # AMP: scaler handles backward + unscales before clip
+                ) / grad_accum_steps
             scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_val)
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
+
+            if (step + 1) % grad_accum_steps == 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_val)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                scheduler.step()
 
         if (epoch + 1) % eval_freq == 0:
             train_loss, val_loss = evaluate_model(

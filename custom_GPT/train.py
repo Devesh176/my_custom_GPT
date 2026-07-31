@@ -3,13 +3,14 @@ import os
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import math
+import glob
+import shutil
 import yaml
 import torch
 import matplotlib
 matplotlib.use('Agg')   # headless-safe (Kaggle / no display)
 import matplotlib.pyplot as plt
 from pathlib import Path
-# Fix: torch.cuda.amp is deprecated in PyTorch 2.x — use torch.amp instead
 from torch.amp import GradScaler, autocast
 from tqdm import tqdm
 
@@ -66,6 +67,7 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
 
 def generate_sample(model, tokenizer, device, start_context):
     model.eval()
+    # torch.compile wraps the model; unwrap to access .positional_embedding if needed
     with torch.no_grad():
         text = generate_text(
             model=model, prompt=start_context, tokenizer=tokenizer,
@@ -99,8 +101,6 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
         model.train()
         optimizer.zero_grad()
 
-        # tqdm: live progress bar — shows step count, loss, and LR so you always
-        # know training is progressing even during a long epoch
         pbar = tqdm(enumerate(train_loader), total=total_batches,
                     desc=f"Epoch {epoch+1}", dynamic_ncols=True, leave=True)
 
@@ -109,13 +109,12 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
 
             with autocast('cuda', enabled=use_amp):
                 logits = model(inputs)
-                # Divide by accum steps so gradient magnitudes stay consistent
                 loss   = torch.nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
                 ) / grad_accum_steps
 
             scaler.scale(loss).backward()
-            running_loss += loss.item() * grad_accum_steps  # undo division for display
+            running_loss += loss.item() * grad_accum_steps
 
             if (step + 1) % grad_accum_steps == 0:
                 scaler.unscale_(optimizer)
@@ -125,7 +124,6 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
                 optimizer.zero_grad()
                 scheduler.step()
 
-            # Refresh the tqdm postfix every log_interval steps
             if (step + 1) % log_interval == 0:
                 avg_loss     = running_loss / log_interval
                 running_loss = 0.0
@@ -148,12 +146,13 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
         if device == 'cuda':
             torch.cuda.synchronize()
 
-        # Save checkpoint after every epoch so Kaggle sessions can be resumed
+        # Save checkpoint — use the raw module if model was torch.compiled
         if checkpoint_dir is not None:
             ckpt_path = Path(checkpoint_dir) / f"checkpoint_epoch_{epoch+1}.pth"
+            raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
             torch.save({
                 'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
+                'model_state_dict': raw_model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'scaler_state_dict': scaler.state_dict(),
@@ -188,7 +187,7 @@ def plot_loss(train_losses, val_losses, save_path=None):
 
 
 # ---------------------------------------------------------------------------
-# Dataset loader: WikiText-103 (HuggingFace datasets)
+# Dataset loader: WikiText-103
 # ---------------------------------------------------------------------------
 def load_wikitext103():
     from datasets import load_dataset
@@ -198,6 +197,45 @@ def load_wikitext103():
     val_text   = "\n".join(t for t in ds["validation"]["text"] if t.strip())
     print(f"  train: {len(train_text):,} chars | val: {len(val_text):,} chars")
     return train_text, val_text
+
+
+# ---------------------------------------------------------------------------
+# Kaggle persistence: resolve checkpoint directory across sessions
+# ---------------------------------------------------------------------------
+def resolve_checkpoint_dir(default_dir: Path) -> Path:
+    """
+    Returns the checkpoint directory to use, with Kaggle multi-session support.
+
+    Priority:
+      1. CHECKPOINT_DIR env var (set manually in notebook for full control)
+      2. /kaggle/working/checkpoints  (if running on Kaggle — survives as output)
+      3. default_dir (local / fallback)
+
+    Also copies any checkpoints found in /kaggle/input/ into the working dir
+    so training can resume from a previously saved session output.
+    """
+    # Allow full override via env var
+    if 'CHECKPOINT_DIR' in os.environ:
+        ckpt_dir = Path(os.environ['CHECKPOINT_DIR'])
+    elif Path('/kaggle/working').exists():
+        # Running on Kaggle — save outside the cloned repo so git clean doesn't wipe it
+        ckpt_dir = Path('/kaggle/working/checkpoints')
+    else:
+        ckpt_dir = default_dir
+
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    # Auto-import checkpoints from a previous Kaggle session saved as output/dataset
+    # Files appear at /kaggle/input/<dataset-name>/checkpoints/*.pth
+    kaggle_input = Path('/kaggle/input')
+    if kaggle_input.exists() and not sorted(ckpt_dir.glob('checkpoint_epoch_*.pth')):
+        prev_ckpts = sorted(kaggle_input.glob('*/checkpoints/checkpoint_epoch_*.pth'))
+        if prev_ckpts:
+            print(f"Found {len(prev_ckpts)} checkpoint(s) in Kaggle input — copying to {ckpt_dir}")
+            for f in prev_ckpts:
+                shutil.copy(f, ckpt_dir)
+
+    return ckpt_dir
 
 
 # ---------------------------------------------------------------------------
@@ -219,12 +257,27 @@ def main(config):
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {total_params:,}")
 
+    # SPEED: torch.compile — fuses ops and generates optimised CUDA kernels.
+    # First forward pass takes ~30-60s extra to compile; all subsequent passes
+    # are ~20-35% faster. Requires PyTorch >= 2.0.
+    if device == 'cuda' and hasattr(torch, 'compile'):
+        print("Compiling model with torch.compile() — first batch will be slow (~60s), rest faster…")
+        model = torch.compile(model, mode='reduce-overhead')
+
     tokenizer     = Tokenizer("openai")
     start_context = "Every effort moves you"
 
     # --- dataloaders ---
     dl_cfg = config['data_load']
     tr_cfg = config['TRAINING_CONFIG']
+    nw     = tr_cfg['num_workers']
+
+    # SPEED: pin_memory → faster CPU→GPU transfer via DMA
+    # SPEED: persistent_workers → workers stay alive between epochs (no fork overhead)
+    # SPEED: prefetch_factor → workers pre-load batches while GPU is busy
+    dl_kwargs = {}
+    if device == 'cuda' and nw > 0:
+        dl_kwargs = dict(pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
     train_dataset = CustomDataset([train_text], tokenizer,
                                   block_size=dl_cfg['block_size'],
@@ -236,23 +289,24 @@ def main(config):
                                   max_length=dl_cfg['max_length'])
 
     train_loader = dataloader_v1(train_dataset, batch_size=tr_cfg['batch_size'],
-                                 shuffle=True,  num_workers=tr_cfg['num_workers'])
+                                 shuffle=True,  num_workers=nw, **dl_kwargs)
     val_loader   = dataloader_v1(val_dataset,   batch_size=tr_cfg['batch_size'],
-                                 shuffle=False, num_workers=tr_cfg['num_workers'])
+                                 shuffle=False, num_workers=nw, **dl_kwargs)
     print(f"Train batches: {len(train_loader):,} | Val batches: {len(val_loader):,}")
 
-    # --- checkpoint resume ---
-    checkpoint_dir = _ROOT / 'checkpoints'
-    checkpoint_dir.mkdir(exist_ok=True)
+    # --- checkpoint dir (Kaggle-persistence-aware) ---
+    checkpoint_dir = resolve_checkpoint_dir(_ROOT / 'checkpoints')
     start_epoch = 0
     existing = sorted(checkpoint_dir.glob('checkpoint_epoch_*.pth'))
     if existing:
         latest = existing[-1]
         print(f"Resuming from checkpoint: {latest}")
-        ckpt = torch.load(latest, map_location=device)
-        model.load_state_dict(ckpt['model_state_dict'])
+        ckpt = torch.load(latest, map_location=device, weights_only=True)
+        # Load into raw model (before compile wrapping)
+        raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
+        raw_model.load_state_dict(ckpt['model_state_dict'])
         start_epoch = ckpt['epoch']
-        print(f"Resuming from epoch {start_epoch + 1}")
+        print(f"  → Resuming from epoch {start_epoch + 1}")
 
     # --- optimiser & scheduler ---
     optimizer = torch.optim.AdamW(
@@ -268,7 +322,8 @@ def main(config):
         optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         scheduler.load_state_dict(ckpt['scheduler_state_dict'])
 
-    print(f"Total steps: {total_steps:,} | Warmup steps: {warmup_steps:,} | Starting epoch: {start_epoch+1}")
+    print(f"Total steps: {total_steps:,} | Warmup: {warmup_steps:,} | "
+          f"Start epoch: {start_epoch + 1} | Checkpoint dir: {checkpoint_dir}")
 
     # --- train ---
     train_losses, val_losses = train_model(
@@ -296,6 +351,7 @@ if __name__ == "__main__":
     plot_loss(train_losses, val_losses,
               save_path=str(_ROOT / 'loss_plot.png'))
 
+    raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
     ckpt = _ROOT / 'gpt_model.pth'
-    torch.save(model.state_dict(), ckpt)
+    torch.save(raw_model.state_dict(), ckpt)
     print(f"Model saved → {ckpt}")

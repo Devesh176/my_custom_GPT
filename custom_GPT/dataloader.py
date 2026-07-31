@@ -58,7 +58,7 @@ def create_dataset(data, tokenizer,
 def dataloader_v1(data, batch_size: int = config['data_load']['batch_size'],
                   shuffle: bool = config['data_load']['shuffle'],
                   num_workers: int = config['data_load']['num_workers'],
-                  mode: str = 'openai') -> DataLoader:
+                  mode: str = 'openai', **kwargs) -> DataLoader:
     if isinstance(data, Dataset):
         dataset = data
     else:
@@ -69,4 +69,5 @@ def dataloader_v1(data, batch_size: int = config['data_load']['batch_size'],
                                   max_length=config['data_load']['max_length'])
     if len(dataset) == 0:
         raise ValueError("No training samples found. Check input data, block_size and stride.")
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
+                     num_workers=num_workers, **kwargs)

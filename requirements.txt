@@ -5,3 +5,4 @@ tiktoken
 matplotlib
 pyyaml
 datasets        # HuggingFace datasets — for WikiText-103
+tqdm            # progress bars for training loop

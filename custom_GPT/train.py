@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 # Fix: torch.cuda.amp is deprecated in PyTorch 2.x — use torch.amp instead
 from torch.amp import GradScaler, autocast
+from tqdm import tqdm
 
 from gpt import GPT
 from generate import generate_text
@@ -44,7 +45,7 @@ def calculate_loss(model, data_loader, device, num_batches):
             if i >= num_batches:
                 break
             inputs, targets = inputs.to(device), targets.to(device)
-            with autocast(enabled=use_amp):
+            with autocast('cuda', enabled=use_amp):
                 logits = model(inputs)
                 loss   = torch.nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
@@ -82,26 +83,39 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
                 checkpoint_dir=None, start_epoch=0):
 
     gradient_clip_val = config['GPT_CONFIG']['gradient_clip_val']
+    grad_accum_steps  = config['TRAINING_CONFIG'].get('gradient_accumulation_steps', 1)
+    log_interval      = config['TRAINING_CONFIG'].get('log_interval', 200)
     use_amp = (device == 'cuda')
-    scaler  = GradScaler('cuda', enabled=use_amp)  # fixed deprecation
+    scaler  = GradScaler('cuda', enabled=use_amp)
     train_losses, val_losses = [], []
+    running_loss = 0.0
 
-    print(f"Starting training — {num_epochs} epoch(s), "
-          f"{len(train_loader)} batches/epoch")
+    total_batches = len(train_loader)
+    eff_batch = config['TRAINING_CONFIG']['batch_size'] * grad_accum_steps
+    print(f"Starting training — {num_epochs} epoch(s), {total_batches} batches/epoch, "
+          f"effective batch = {eff_batch}")
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
         model.train()
-        grad_accum_steps = config['TRAINING_CONFIG'].get('gradient_accumulation_steps', 1)
-        for step, (inputs, targets) in enumerate(train_loader):
+        optimizer.zero_grad()
+
+        # tqdm: live progress bar — shows step count, loss, and LR so you always
+        # know training is progressing even during a long epoch
+        pbar = tqdm(enumerate(train_loader), total=total_batches,
+                    desc=f"Epoch {epoch+1}", dynamic_ncols=True, leave=True)
+
+        for step, (inputs, targets) in pbar:
             inputs, targets = inputs.to(device), targets.to(device)
-            # autocast: fixed deprecation (torch.amp instead of torch.cuda.amp)
+
             with autocast('cuda', enabled=use_amp):
                 logits = model(inputs)
-                # Divide loss by accum steps so gradients average correctly
+                # Divide by accum steps so gradient magnitudes stay consistent
                 loss   = torch.nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
                 ) / grad_accum_steps
+
             scaler.scale(loss).backward()
+            running_loss += loss.item() * grad_accum_steps  # undo division for display
 
             if (step + 1) % grad_accum_steps == 0:
                 scaler.unscale_(optimizer)
@@ -111,12 +125,21 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
                 optimizer.zero_grad()
                 scheduler.step()
 
+            # Refresh the tqdm postfix every log_interval steps
+            if (step + 1) % log_interval == 0:
+                avg_loss     = running_loss / log_interval
+                running_loss = 0.0
+                current_lr   = scheduler.get_last_lr()[0]
+                pbar.set_postfix(loss=f"{avg_loss:.4f}", lr=f"{current_lr:.2e}", refresh=True)
+
+        pbar.close()
+
         if (epoch + 1) % eval_freq == 0:
             train_loss, val_loss = evaluate_model(
                 model, train_loader, val_loader, device, eval_iter
             )
             current_lr = scheduler.get_last_lr()[0]
-            print(f"Epoch [{epoch+1}] | "
+            print(f"\nEpoch [{epoch+1}] | "
                   f"LR: {current_lr:.2e} | "
                   f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
             train_losses.append(train_loss)
@@ -222,7 +245,6 @@ def main(config):
     checkpoint_dir = _ROOT / 'checkpoints'
     checkpoint_dir.mkdir(exist_ok=True)
     start_epoch = 0
-    # Auto-resume from the latest checkpoint if one exists
     existing = sorted(checkpoint_dir.glob('checkpoint_epoch_*.pth'))
     if existing:
         latest = existing[-1]
@@ -238,11 +260,10 @@ def main(config):
         lr=float(tr_cfg['learning_rate']),
         weight_decay=float(tr_cfg['weight_decay'])
     )
-    total_steps   = len(train_loader) * tr_cfg['num_epochs']
-    warmup_steps  = config['GPT_CONFIG']['warmup_steps']
-    scheduler     = get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+    total_steps  = len(train_loader) * tr_cfg['num_epochs']
+    warmup_steps = config['GPT_CONFIG']['warmup_steps']
+    scheduler    = get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
-    # Restore optimizer + scheduler states if resuming
     if existing:
         optimizer.load_state_dict(ckpt['optimizer_state_dict'])
         scheduler.load_state_dict(ckpt['scheduler_state_dict'])

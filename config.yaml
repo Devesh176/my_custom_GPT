@@ -8,23 +8,19 @@ tokenizer:
     tokenizer_type: "BPE"
     tokenizer_vocab_path: "utils/bpe_vocab.json"
     tokenizer_merges_path: "utils/bpe_merges.txt"
-    vocab_size: 50257 # same as gpt2 tokenzer
-    embedding_dim: 768
-    token_sequence_size: 256
+    vocab_size: 50257        # matches GPT-2 / tiktoken gpt2 encoding
 
 data_load:
-    batch_size: 64  # hyper parameters
-    block_size: 64
-    num_workers: 0
-    stride: 1
-    max_length: 128
+    batch_size: 16           # unused directly; TRAINING_CONFIG.batch_size drives training
+    block_size: 1024         # full context window (was 64 — caused overfitting)
+    num_workers: 2
+    stride: 1024             # FIX: non-overlapping windows (was 1 — caused massive redundancy & overfitting)
+    max_length: 1024
     shuffle: True
-    token_sequence_size: 256
 
 GPT_CONFIG:
     model_name: "custom_gpt"
     model_type: "GPT"
-    # optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     scheduler: "CosineAnnealingLR"
     warmup_steps: 1000
@@ -34,25 +30,21 @@ GPT_CONFIG:
     log_interval: 100
     emb_dim: 768
     n_heads: 12
-    ff_hidden_dim: 1024
-    ctx_length: 1024
+    ff_hidden_dim: 3072      # FIX: 4 × emb_dim (was 1024, under-capacity)
+    ctx_length: 1024         # FIX: matches block_size and positional embedding size
     dropout: 0.1
     qkv_bias: False
     n_layers: 12
-    device: "cuda"  # or "cpu"
+    device: "cuda"
 
 TRAINING_CONFIG:
     optimizer: "AdamW"
     loss_function: "CrossEntropyLoss"
     num_epochs: 10
-    batch_size: 1
+    batch_size: 16
     weight_decay: 0.1
-    learning_rate: 5e-4
+    learning_rate: 3e-4      # slightly lower LR is safer for stable training
     eval_freq: 1
-    eval_iter: 1
-    train_ratio: 0.8
-    num_workers: 0
-
-
-
-
+    eval_iter: 50            # evaluate on 50 batches (was 1 — too noisy)
+    train_ratio: 0.9
+    num_workers: 2

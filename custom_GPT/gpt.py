@@ -1,39 +1,43 @@
 import torch
 import torch.nn as nn
 from transformer import TransformerBlock
-from embeddings import token_embedding_layer, sinusoidal_positional_embedding
+from embeddings import token_embedding_layer, positional_embedding_layer
+
 
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.token_embedding = token_embedding_layer(vocab_size=config["tokenizer"]['vocab_size'], embedding_dim=config['tokenizer']['embedding_dim'], device=config['GPT_CONFIG']['device'])
-        self.positional_embedding = sinusoidal_positional_embedding(token_sequence_size=config['tokenizer']['token_sequence_size'], token_embedding_dim=config['tokenizer']['embedding_dim'], device=config['GPT_CONFIG']['device'])
-        self.dropout_embedding = nn.Dropout(p=config['GPT_CONFIG']['dropout'])
+        emb_dim     = config['tokenizer']['embedding_dim']
+        vocab_size  = config['tokenizer']['vocab_size']
+        ctx_length  = config['GPT_CONFIG']['ctx_length']
+
+        self.token_embedding      = token_embedding_layer(vocab_size, emb_dim)
+        # Learnable positional embeddings — ctx_length positions, each of size emb_dim
+        self.positional_embedding = positional_embedding_layer(ctx_length, emb_dim)
+        self.dropout_embedding    = nn.Dropout(p=config['GPT_CONFIG']['dropout'])
 
         self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(
-                config=config['GPT_CONFIG']
-            ) for _ in range(config['GPT_CONFIG']['n_layers'])
+            TransformerBlock(config=config['GPT_CONFIG'])
+            for _ in range(config['GPT_CONFIG']['n_layers'])
         ])
 
-        self.final_layer_norm = nn.LayerNorm(config['tokenizer']['embedding_dim'])
-        self.output_layer = nn.Linear(config['tokenizer']['embedding_dim'], config["tokenizer"]['vocab_size'], bias=False)
+        self.final_layer_norm = nn.LayerNorm(emb_dim)
+        self.output_layer     = nn.Linear(emb_dim, vocab_size, bias=False)
 
     def forward(self, x):
-        # x shape: (batch_size, sequence_length)
-        token_embeddings = self.token_embedding(x)  # shape: (batch_size, sequence_length, embedding_dim)
-        """# Note: the sequence length should be less than or equal to the token_sequence_size defined in config.yaml"""
-        seq_len = x.shape[1]
-        positional_embeddings = self.positional_embedding[:seq_len, :].unsqueeze(0)  # shape: (1, sequence_length, embedding_dim)
-        positional_embeddings = positional_embeddings.to(token_embeddings.device)
-        embeddings = token_embeddings + positional_embeddings  # shape: (batch_size, sequence_length, embedding_dim)
-        embeddings = self.dropout_embedding(embeddings)
+        # x: (batch, seq_len)
+        batch, seq_len = x.shape
+        token_emb = self.token_embedding(x)   # (batch, seq_len, emb_dim)
+
+        # positions: (1, seq_len) — shared across the batch
+        positions = torch.arange(seq_len, device=x.device).unsqueeze(0)
+        pos_emb   = self.positional_embedding(positions)  # (1, seq_len, emb_dim)
+
+        embeddings = self.dropout_embedding(token_emb + pos_emb)
 
         for block in self.transformer_blocks:
             embeddings = block(embeddings)
 
         embeddings = self.final_layer_norm(embeddings)
-        logits = self.output_layer(embeddings)  # shape: (batch_size, sequence_length, vocab_size)
+        logits     = self.output_layer(embeddings)   # (batch, seq_len, vocab_size)
         return logits
-
-

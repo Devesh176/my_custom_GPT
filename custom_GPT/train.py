@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Agg')   # headless-safe (Kaggle / no display)
 import matplotlib.pyplot as plt
 from pathlib import Path
+from torch.cuda.amp import GradScaler, autocast
 
 from gpt import GPT
 from generate import generate_text
@@ -33,16 +34,17 @@ def get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps):
 def calculate_loss(model, data_loader, device, num_batches):
     model.eval()
     total_loss = 0.0
-    # BUG FIX: actually honour num_batches instead of iterating all batches
+    use_amp = device == 'cuda'
     with torch.no_grad():
         for i, (inputs, targets) in enumerate(data_loader):
             if i >= num_batches:
                 break
             inputs, targets = inputs.to(device), targets.to(device)
-            logits = model(inputs)
-            loss   = torch.nn.functional.cross_entropy(
-                logits.view(-1, logits.size(-1)), targets.view(-1)
-            )
+            with autocast(enabled=use_amp):
+                logits = model(inputs)
+                loss   = torch.nn.functional.cross_entropy(
+                    logits.view(-1, logits.size(-1)), targets.view(-1)
+                )
             total_loss += loss.item()
     count = min(num_batches, len(data_loader))
     return total_loss / max(1, count)
@@ -72,28 +74,34 @@ def generate_sample(model, tokenizer, device, start_context):
 # Training loop
 # ---------------------------------------------------------------------------
 def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
-                num_epochs, eval_iter, tokenizer, start_context, eval_freq, config):
+                num_epochs, eval_iter, tokenizer, start_context, eval_freq, config,
+                checkpoint_dir=None, start_epoch=0):
 
     gradient_clip_val = config['GPT_CONFIG']['gradient_clip_val']
+    use_amp = (device == 'cuda')
+    scaler  = GradScaler(enabled=use_amp)
     train_losses, val_losses = [], []
 
     print(f"Starting training — {num_epochs} epoch(s), "
           f"{len(train_loader)} batches/epoch")
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, start_epoch + num_epochs):
         model.train()
         for inputs, targets in train_loader:
             inputs, targets = inputs.to(device), targets.to(device)
             optimizer.zero_grad()
-            logits = model(inputs)
-            loss   = torch.nn.functional.cross_entropy(
-                logits.view(-1, logits.size(-1)), targets.view(-1)
-            )
-            loss.backward()
-            # FIX: apply gradient clipping (was configured but never called)
+            # AMP: autocast wraps forward pass for FP16 on CUDA
+            with autocast(enabled=use_amp):
+                logits = model(inputs)
+                loss   = torch.nn.functional.cross_entropy(
+                    logits.view(-1, logits.size(-1)), targets.view(-1)
+                )
+            # AMP: scaler handles backward + unscales before clip
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_val)
-            optimizer.step()
-            # FIX: step the scheduler every optimizer step (per-batch)
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
 
         if (epoch + 1) % eval_freq == 0:
@@ -101,15 +109,28 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
                 model, train_loader, val_loader, device, eval_iter
             )
             current_lr = scheduler.get_last_lr()[0]
-            print(f"Epoch [{epoch+1}/{num_epochs}] | "
+            print(f"Epoch [{epoch+1}] | "
                   f"LR: {current_lr:.2e} | "
                   f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-        # FIX: guard cuda.synchronize() so CPU runs don't crash
         if device == 'cuda':
             torch.cuda.synchronize()
+
+        # Save checkpoint after every epoch so Kaggle sessions can be resumed
+        if checkpoint_dir is not None:
+            ckpt_path = Path(checkpoint_dir) / f"checkpoint_epoch_{epoch+1}.pth"
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'scaler_state_dict': scaler.state_dict(),
+                'train_losses': train_losses,
+                'val_losses': val_losses,
+            }, ckpt_path)
+            print(f"Checkpoint saved → {ckpt_path}")
 
         print("Sample: ", end="")
         generate_sample(model, tokenizer, device, start_context)
@@ -190,6 +211,20 @@ def main(config):
                                  shuffle=False, num_workers=tr_cfg['num_workers'])
     print(f"Train batches: {len(train_loader):,} | Val batches: {len(val_loader):,}")
 
+    # --- checkpoint resume ---
+    checkpoint_dir = _ROOT / 'checkpoints'
+    checkpoint_dir.mkdir(exist_ok=True)
+    start_epoch = 0
+    # Auto-resume from the latest checkpoint if one exists
+    existing = sorted(checkpoint_dir.glob('checkpoint_epoch_*.pth'))
+    if existing:
+        latest = existing[-1]
+        print(f"Resuming from checkpoint: {latest}")
+        ckpt = torch.load(latest, map_location=device)
+        model.load_state_dict(ckpt['model_state_dict'])
+        start_epoch = ckpt['epoch']
+        print(f"Resuming from epoch {start_epoch + 1}")
+
     # --- optimiser & scheduler ---
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -199,7 +234,13 @@ def main(config):
     total_steps   = len(train_loader) * tr_cfg['num_epochs']
     warmup_steps  = config['GPT_CONFIG']['warmup_steps']
     scheduler     = get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-    print(f"Total steps: {total_steps:,} | Warmup steps: {warmup_steps:,}")
+
+    # Restore optimizer + scheduler states if resuming
+    if existing:
+        optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+        scheduler.load_state_dict(ckpt['scheduler_state_dict'])
+
+    print(f"Total steps: {total_steps:,} | Warmup steps: {warmup_steps:,} | Starting epoch: {start_epoch+1}")
 
     # --- train ---
     train_losses, val_losses = train_model(
@@ -207,7 +248,8 @@ def main(config):
         device=device, optimizer=optimizer, scheduler=scheduler,
         num_epochs=tr_cfg['num_epochs'], eval_iter=tr_cfg['eval_iter'],
         tokenizer=tokenizer, start_context=start_context,
-        eval_freq=tr_cfg['eval_freq'], config=config
+        eval_freq=tr_cfg['eval_freq'], config=config,
+        checkpoint_dir=checkpoint_dir, start_epoch=start_epoch
     )
 
     return train_losses, val_losses, model, tokenizer

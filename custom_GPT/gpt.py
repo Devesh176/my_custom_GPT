@@ -7,7 +7,7 @@ from embeddings import token_embedding_layer, positional_embedding_layer
 class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
-        emb_dim     = config['tokenizer']['embedding_dim']
+        emb_dim     = config['GPT_CONFIG']['emb_dim']
         vocab_size  = config['tokenizer']['vocab_size']
         ctx_length  = config['GPT_CONFIG']['ctx_length']
 

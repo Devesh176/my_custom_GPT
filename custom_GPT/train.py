@@ -7,6 +7,7 @@ import glob
 import shutil
 import yaml
 import torch
+import torch.nn as nn
 import matplotlib
 matplotlib.use('Agg')   # headless-safe (Kaggle / no display)
 import matplotlib.pyplot as plt
@@ -66,15 +67,25 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
 
 
 def generate_sample(model, tokenizer, device, start_context):
-    model.eval()
-    # torch.compile wraps the model; unwrap to access .positional_embedding if needed
+    raw = get_raw_model(model)
+    raw.eval()
     with torch.no_grad():
         text = generate_text(
-            model=model, prompt=start_context, tokenizer=tokenizer,
+            model=raw, prompt=start_context, tokenizer=tokenizer,
             max_length=50, temperature=1.0, device=device
         )
         print(text.replace("\n", " "))
-    model.train()
+    raw.train()
+
+
+def get_raw_model(model):
+    """Unwrap nn.DataParallel and/or torch.compile so we can access model attributes."""
+    m = model
+    if hasattr(m, 'module'):    # DataParallel
+        m = m.module
+    if hasattr(m, '_orig_mod'): # torch.compile
+        m = m._orig_mod
+    return m
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +160,7 @@ def train_model(model, train_loader, val_loader, device, optimizer, scheduler,
         # Save checkpoint — use the raw module if model was torch.compiled
         if checkpoint_dir is not None:
             ckpt_path = Path(checkpoint_dir) / f"checkpoint_epoch_{epoch+1}.pth"
-            raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
+            raw_model = get_raw_model(model)
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': raw_model.state_dict(),
@@ -257,12 +268,19 @@ def main(config):
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {total_params:,}")
 
-    # SPEED: torch.compile — fuses ops and generates optimised CUDA kernels.
-    # First forward pass takes ~30-60s extra to compile; all subsequent passes
-    # are ~20-35% faster. Requires PyTorch >= 2.0.
+    # --- Multi-GPU: DataParallel splits each batch across all available GPUs ---
+    # With 2×T4 (29 GB total VRAM), memory pressure is halved per GPU.
+    n_gpus = torch.cuda.device_count() if device == 'cuda' else 0
+    if n_gpus > 1:
+        print(f"Using {n_gpus} GPUs with nn.DataParallel — effective VRAM: {n_gpus * 14.56:.0f} GB")
+        model = nn.DataParallel(model)
+
+    # SPEED: torch.compile — fuses ops into optimised CUDA kernels.
+    # Use mode='default' (NOT 'reduce-overhead') to avoid CUDA Graphs private
+    # memory pools which caused the OOM (5.45 GiB in private pools).
     if device == 'cuda' and hasattr(torch, 'compile'):
-        print("Compiling model with torch.compile() — first batch will be slow (~60s), rest faster…")
-        model = torch.compile(model, mode='reduce-overhead')
+        print("Compiling model with torch.compile() — first batch ~60s slower, rest faster…")
+        model = torch.compile(model, mode='default')
 
     tokenizer     = Tokenizer("openai")
     start_context = "Every effort moves you"
@@ -302,9 +320,8 @@ def main(config):
         latest = existing[-1]
         print(f"Resuming from checkpoint: {latest}")
         ckpt = torch.load(latest, map_location=device, weights_only=True)
-        # Load into raw model (before compile wrapping)
-        raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
-        raw_model.load_state_dict(ckpt['model_state_dict'])
+        # Unwrap DataParallel + compile before loading weights
+        get_raw_model(model).load_state_dict(ckpt['model_state_dict'])
         start_epoch = ckpt['epoch']
         print(f"  → Resuming from epoch {start_epoch + 1}")
 
@@ -351,7 +368,7 @@ if __name__ == "__main__":
     plot_loss(train_losses, val_losses,
               save_path=str(_ROOT / 'loss_plot.png'))
 
-    raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
+    raw_model = get_raw_model(model)
     ckpt = _ROOT / 'gpt_model.pth'
     torch.save(raw_model.state_dict(), ckpt)
     print(f"Model saved → {ckpt}")

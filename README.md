@@ -3,17 +3,52 @@
 ![alt text](images/GPT_architecture.png)
 
 
-# Custom GPT for Agricultural QA
+# Custom GPT just for Learning !!
 
-This project focuses on building and fine-tuning a custom GPT model for question answering within the agricultural domain. The model is trained on a dataset of agricultural questions and answers.
+This project focuses on building andGPT model from scratch focusing on learning and hands on experience.
 
 ## Project Structure
-
-- Several code cells within the notebook demonstrate the steps for:
-    - Loading and preprocessing the agricultural QA dataset.
-    - Implementing a custom Bigram Language Model.
-    - Implementing a GPT-like Transformer model from scratch.
-    - Training and evaluating the custom models.
+```
+├── cmd.txt
+├── config.yaml
+├── custom_GPT
+│   ├── BigramLM.py
+│   ├── bpe.py
+│   ├── dataloader.py
+│   ├── embeddings.py
+│   ├── generate.py
+│   ├── gpt.py
+│   ├── mhattention.py
+│   ├── __pycache__
+│   │   ├── bpe.cpython-312.pyc
+│   │   ├── dataloader.cpython-312.pyc
+│   │   ├── embeddings.cpython-312.pyc
+│   │   ├── generate.cpython-312.pyc
+│   │   ├── gpt.cpython-312.pyc
+│   │   ├── mhattention.cpython-312.pyc
+│   │   ├── tokenizer.cpython-312.pyc
+│   │   ├── transformer.cpython-312.pyc
+│   │   └── utils.cpython-312.pyc
+│   ├── tokenizer.py
+│   ├── train.py
+│   ├── transformer.py
+│   └── utils.py
+├── custom_llm.ipynb
+├── data
+│   ├── process_data.py
+│   └── __pycache__
+│       └── process_data.cpython-39.pyc
+├── finetune_gpt2.ipynb
+├── images
+│   └── GPT_architecture.png
+├── kaggle_train.ipynb
+├── LICENSE
+├── model
+│   └── gpt_model.pth
+├── README.md
+├── requirements.txt
+└── the-verdict.txt
+```
 
 ## Getting Started
 
@@ -22,32 +57,20 @@ This project focuses on building and fine-tuning a custom GPT model for question
   ```bash
      pip install pandas numpy regex torch torchtext transformers sentencepiece tqdm datasets
   ```
-3.  **Run the notebook:** Execute the cells in the notebook sequentially to load the data, define and train the models, and fine-tune the pre-trained model.
 
 ## Data
 
-The project uses the "KisanVaani/agriculture-qa-english-only" dataset from Hugging Face. The data is loaded using `pandas.read_parquet`.
+The project uses the "WikiText" datset.
 
 ## Models
 
 -   **Custom Bigram Language Model:** A basic language model implemented from scratch to understand the fundamentals of language modeling.
--   **Custom GPT-like Transformer:** A more advanced model built with Transformer blocks, including multi-head attention and feed-forward networks.
+-   **Custom GPT-like Transformer:** 163M-parameter GPT-2-scale Transformer from scratch in PyTorch
 
 
 ## Training and Evaluation
 
-The notebook includes code for:
-
--   Splitting the data into training and validation sets.
--   Defining loss functions and optimizers.
--   Training loops for both custom and fine-tuned models.
--   Evaluating the models using loss metrics.
+The notebook ["kaggle_train.py"](https://github.com/Devesh176/my_custom_GPT/blob/main/kaggle_train.ipynb) includes code for training the model on kaggle session.
 
 ## Results
-
-The training and validation loss are printed during the training process to monitor the model's performance.
-
-## Suggestions
-
-Please provide your suggestions to make the project more successful.
-
+Trained on WikiText-103 (538M chars, 7,190 batches/epoch) across 2×T4 GPUs (29 GB VRAM) using nn.DataParallel; achieved Train Loss: 3.29 | Val Loss: 3.35 by epoch 2 with no sign of overfitting.
